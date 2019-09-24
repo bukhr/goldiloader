@@ -47,7 +47,7 @@ module Goldiloader
     end
 
     def auto_include_value
-      @values.fetch(:auto_include, true)
+      @values.fetch(:auto_include, Goldiloader.configuration.auto_include)
     end
 
     def auto_include_value=(value)

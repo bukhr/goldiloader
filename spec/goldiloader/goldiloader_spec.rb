@@ -63,6 +63,10 @@ describe Goldiloader do
     ActiveRecord::Base.logger.info('Test setup complete')
   end
 
+  after do
+    ActiveRecord::Base.logger.info('Test complete')
+  end
+
   it "auto eager loads has_many associations" do
     blogs = Blog.order(:name).to_a
 
@@ -746,6 +750,82 @@ describe Goldiloader do
       blog.posts.each do |post|
         expect(post.association(:tags)).to be_loaded
       end
+
+      other_blog.posts.each do |post|
+        expect(post.association(:tags)).not_to be_loaded
+      end
+    end
+  end
+
+  context "with auto_loading disabled by default" do
+    before do
+      Goldiloader.configuration.auto_include = false
+    end
+
+    after do
+      Goldiloader.configuration.auto_include = true
+    end
+
+    it "doesn't auto eager load has_many associations" do
+      blogs = Blog.order(:name).to_a
+
+      # Force the first blogs first post to load
+      posts = blogs.first.posts.to_a
+      expect(posts).to match_array Post.where(blog_id: blogs.first.id)
+
+      blogs.drop(1).each do |blog|
+        expect(blog.association(:posts)).not_to be_loaded
+      end
+    end
+
+    it "doesn't auto eager load has_one associations" do
+      users = User.order(:name).to_a
+
+      # Force the first user's address to load
+      user = users.first
+      address = user.address
+      expect(address).to eq Address.where(user_id: user.id).first
+
+      users.drop(1).each do |blog|
+        expect(blog.association(:address)).not_to be_loaded
+      end
+    end
+
+    it "doesn't auto eager load belongs_to associations" do
+      posts = Post.order(:title).to_a
+      # Force the first post's blog to load
+      post1 = posts.first
+      blog = post1.blog
+      expect(blog).to eq Blog.where(id: post1.blog_id).first
+
+      posts.drop(1).each do |post|
+        expect(post.association(:blog)).not_to be_loaded
+      end
+    end
+
+    it "doesn't auto eager load has_and_belongs_to_many associations" do
+      posts = Post.all.to_a
+
+      # Force the first post's tags to load
+      posts.first.tags.to_a
+
+      posts.drop(1).each do |post|
+        expect(post.association(:tags)).not_to be_loaded
+      end
+    end
+
+    it "doesn't auto eager loads nested associations" do
+      posts = Post.order(:title).to_a
+      # Force the first post's blog to load
+      blog = posts.first.blog
+
+      # Load another blogs posts
+      other_blog = posts.last.blog
+      other_blog_post = other_blog.posts.to_a.first
+
+      blog.posts.to_a.first.tags.to_a
+
+      expect(other_blog_post.association(:tags)).not_to be_loaded
 
       other_blog.posts.each do |post|
         expect(post.association(:tags)).not_to be_loaded

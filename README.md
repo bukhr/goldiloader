@@ -81,11 +81,21 @@ You can disable automatic eager loading with `auto_include` query scope method:
 Blog.order(:name).auto_include(false)
 ```
 
+It will disable automatic eager loading for the scope associations but it will not apply to nested relations.
+
 This can also be used to disable automatic eager loading for associations:
 
 ```ruby
 class Blog < ActiveRecord::Base
   has_many :posts, -> { auto_include(false) }
+end
+```
+
+You can also disable automatic eager loading completely through configuration:
+
+```ruby
+Goldiloader.configure do |config|
+  config.auto_include = false
 end
 ```
 
@@ -248,7 +258,7 @@ end
 
 ## Status
 
-This gem is tested with Rails 4.2, 5.0, 5.1, 5.2 and Edge using MRI 2.3, 2.4, 2.5 and 2.6. 
+This gem is tested with Rails 4.2, 5.0, 5.1, 5.2 and Edge using MRI 2.3, 2.4, 2.5 and 2.6.
 
 Let us know if you find any issues or have any other feedback.
 
