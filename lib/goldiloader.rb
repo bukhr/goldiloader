@@ -8,4 +8,29 @@ require 'goldiloader/scope_info'
 require 'goldiloader/association_options'
 require 'goldiloader/association_loader'
 require 'goldiloader/active_record_patches'
-require 'goldiloader/configuration'
+
+module Goldiloader
+  class << self
+    attr_accessor :auto_preload
+
+    def auto_include
+      Goldiloader.configuration.auto_include || auto_preload
+    end
+  end
+
+  def self.configuration
+    @configuration ||= Configuration.new
+  end
+
+  def self.configure
+    yield(configuration)
+  end
+
+  class Configuration
+    attr_accessor :auto_include
+
+    def initialize
+      @auto_include = true
+    end
+  end
+end

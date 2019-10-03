@@ -831,6 +831,240 @@ describe Goldiloader do
         expect(post.association(:tags)).not_to be_loaded
       end
     end
+
+    context "using auto_preload block" do
+      it "auto eager loads has_many associations" do
+        blogs = Blog.order(:name).to_a
+
+        # Sanity check that associations aren't loaded yet
+        blogs.each do |blog|
+          expect(blog.association(:posts)).not_to be_loaded
+        end
+
+        # Force the first blogs first post to load using auto_preload
+        Blog.auto_preload do
+          blogs.first.posts.to_a
+        end
+
+        blogs.each do |blog|
+          expect(blog.association(:posts)).to be_loaded
+        end
+
+        expect(blogs.first.posts.map(&:title)).to match_array(['blog1-post1', 'blog1-post2'])
+        expect(blogs.second.posts.map(&:title)).to match_array(['blog2-post1', 'blog2-post2'])
+
+        expect(Post).to have_received(:find_by_sql).once
+      end
+
+      it "auto eager loads belongs_to associations" do
+        posts = Post.order(:title).to_a
+
+        # Sanity check that associations aren't loaded yet
+        posts.each do |blog|
+          expect(blog.association(:blog)).not_to be_loaded
+        end
+
+        # Force the first post's blog to load
+        Post.auto_preload do
+          posts.first.blog
+        end
+
+        posts.each do |blog|
+          expect(blog.association(:blog)).to be_loaded
+        end
+
+        expect(posts.map(&:blog).map(&:name)).to eq(%w[blog1 blog1 blog2 blog2])
+        expect(Blog).to have_received(:find_by_sql).once
+      end
+
+      it "auto eager loads has_one associations" do
+        users = User.order(:name).to_a
+
+        # Sanity check that associations aren't loaded yet
+        users.each do |user|
+          expect(user.association(:address)).not_to be_loaded
+        end
+
+        # Force the first user's address to load
+        User.auto_preload do
+          users.first.address
+        end
+
+        users.each do |blog|
+          expect(blog.association(:address)).to be_loaded
+        end
+
+        expect(users.map(&:address).map(&:city)).to match_array(['author1-city', 'author2-city', 'author3-city'])
+        expect(Address).to have_received(:find_by_sql).once
+      end
+
+      it "auto eager loads nested associations" do
+        blogs = Blog.order(:name).to_a
+
+        Blog.auto_preload do
+          blogs.first.posts.to_a.first.author
+        end
+
+        blogs.flat_map(&:posts).each do |blog|
+          expect(blog.association(:author)).to be_loaded
+        end
+
+        expect(blogs.first.posts.first.author).to eq author1
+        expect(blogs.first.posts.second.author).to eq author2
+        expect(blogs.second.posts.first.author).to eq author3
+        expect(blogs.second.posts.second.author).to eq author1
+        expect(Post).to have_received(:find_by_sql).once
+      end
+
+      it "auto eager loads has_many through associations" do
+        blogs = Blog.order(:name).to_a
+
+        Blog.auto_preload do
+          blogs.first.authors.to_a
+        end
+
+        blogs.each do |blog|
+          expect(blog.association(:authors)).to be_loaded
+        end
+
+        expect(blogs.first.authors).to match_array([author1, author2])
+        expect(blogs.second.authors).to match_array([author3, author1])
+        expect(User).to have_received(:find_by_sql).once
+      end
+
+      it "auto eager loads nested has_many through associations" do
+        blogs = Blog.order(:name).to_a
+        Blog.auto_preload do
+          blogs.first.addresses.to_a
+        end
+
+        blogs.each do |blog|
+          expect(blog.association(:addresses)).to be_loaded
+        end
+
+        expect(blogs.first.addresses).to match_array([author1, author2].map(&:address))
+        expect(blogs.second.addresses).to match_array([author3, author1].map(&:address))
+        expect(Address).to have_received(:find_by_sql).once
+      end
+
+      it "auto eager loads associations when the model is loaded via find" do
+        blog = Blog.find(blog1.id)
+
+        Blog.auto_preload do
+          blog.posts.to_a.first.author
+        end
+        blog.posts.each do |post|
+          expect(post.association(:author)).to be_loaded
+        end
+      end
+
+      it "auto eager loads polymorphic associations" do
+        tags = Tag.where('parent_id IS NOT NULL').order(:name).to_a
+
+        Tag.auto_preload do
+          tags.first.owner
+        end
+
+        tags.each do |tag|
+          expect(tag.association(:owner)).to be_loaded
+        end
+
+        expect(tags.first.owner).to eq author1
+        expect(tags.second.owner).to eq group1
+        expect(tags.third.owner).to eq author2
+      end
+
+      it "auto eager loads associations of polymorphic associations" do
+        tags = Tag.where('parent_id IS NOT NULL').order(:name).to_a
+        users = User.auto_preload {tags.map(&:owner).select { |owner| owner.is_a?(User) }.sort_by(&:name)}
+
+        User.auto_preload do
+          users.first.posts.to_a
+        end
+
+        users.each do |user|
+          expect(user.association(:posts)).to be_loaded
+        end
+        expect(users.first.posts).to eq Post.where(author_id: author1.id)
+        expect(users.second.posts).to eq Post.where(author_id: author2.id)
+      end
+
+      it "sets inverse associations properly" do
+        blogs = Blog.order(:name).to_a
+
+        # Force the first blog's posts to load
+        Blog.auto_preload do
+          blogs.first.posts_with_inverse_of.to_a
+        end
+
+        blogs.each do |blog|
+          expect(blog.association(:posts_with_inverse_of)).to be_loaded
+          blog.posts_with_inverse_of.each do |post|
+            expect(post.association(:blog)).to be_loaded
+            expect(post.blog.object_id).to eq(blog.object_id)
+          end
+        end
+      end
+
+      it "only auto eager loads associations loaded through the same path" do
+        root_tags = Tag.where(parent_id: nil).order(:name).to_a
+
+        Tag.auto_preload do
+          root_tags.first.children.to_a
+        end
+
+        # Make sure we loaded all child tags
+        root_tags.each do |tag|
+          expect(tag.association(:children)).to be_loaded
+        end
+
+        # Force a load of a root tag's owner
+        Tag.auto_preload do
+          root_tags.first.owner
+        end
+        # All root tag owners should be loaded
+        root_tags.each do |tag|
+          expect(tag.association(:owner)).to be_loaded
+        end
+
+        # Child tag owners should not be loaded
+        child_tags = root_tags.flat_map(&:children)
+        child_tags.each do |tag|
+          expect(tag.association(:owner)).not_to be_loaded
+        end
+      end
+
+      it "auto eager loads associations that have been overridden" do
+        blogs = Blog.order(:name).to_a
+
+        Blog.auto_preload do
+          blogs.first.association(:posts_overridden).load_target
+        end
+
+        blogs.each do |blog|
+          expect(blog.association(:posts_overridden)).to be_loaded
+        end
+      end
+
+      it "marks auto eager loaded models as read only when the association is read only" do
+        blog = Blog.first!
+
+        post = Blog.auto_preload do
+          blog.read_only_posts.to_a.first
+        end
+        expect { post.save! }.to raise_error(ActiveRecord::ReadOnlyRecord)
+      end
+
+      it "doesn't mark auto eager loaded models as read only when the association is not read only" do
+        blog = Blog.first!
+
+        post = Blog.auto_preload do
+          blog.posts.to_a.first
+        end
+
+        expect { post.save! }.not_to raise_error
+      end
+    end
   end
 
   describe "CollectionProxy#exists?" do

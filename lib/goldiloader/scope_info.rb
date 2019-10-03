@@ -17,7 +17,8 @@ module Goldiloader
     end
 
     def auto_include?
-      scope.auto_include_value
+      return scope.auto_include_value unless scope.auto_include_value.nil?
+      Goldiloader.auto_include
     end
 
     def from?

@@ -16,7 +16,7 @@ describe Goldiloader::AutoIncludeContext do
       let!(:fruits) { create_mock_models(2) }
 
       before do
-        Goldiloader::AutoIncludeContext.register_models(roots, [:cars, :fruit])
+        Goldiloader::AutoIncludeContext.register_models(roots, included_associations: [:cars, :fruit])
       end
 
       it "sets the AutoIncludeContext for roots" do
@@ -53,7 +53,7 @@ describe Goldiloader::AutoIncludeContext do
       let!(:wheels) { create_mock_models(8) }
 
       before do
-        Goldiloader::AutoIncludeContext.register_models(roots, car: :wheels)
+        Goldiloader::AutoIncludeContext.register_models(roots, included_associations: [car: :wheels])
       end
 
       it "sets the AutoIncludeContext for roots" do
@@ -92,7 +92,7 @@ describe Goldiloader::AutoIncludeContext do
       let!(:wheels) { create_mock_models(8) }
 
       before do
-        Goldiloader::AutoIncludeContext.register_models(roots, [:person, car: :wheels])
+        Goldiloader::AutoIncludeContext.register_models(roots, included_associations: [:person, car: :wheels])
       end
 
       it "sets the AutoIncludeContext for roots" do
@@ -133,7 +133,7 @@ describe Goldiloader::AutoIncludeContext do
       end
 
       before do
-        Goldiloader::AutoIncludeContext.register_models(roots, :car)
+        Goldiloader::AutoIncludeContext.register_models(roots, included_associations: :car)
       end
 
       it "sets the AutoIncludeContext for roots" do

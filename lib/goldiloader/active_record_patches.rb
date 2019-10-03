@@ -9,6 +9,14 @@ module Goldiloader
 
       class << self
         delegate :auto_include, to: :all
+
+        def auto_preload(auto_include = true)
+          previous_state = Goldiloader.auto_preload
+          Goldiloader.auto_preload = auto_include
+          yield
+        ensure
+          Goldiloader.auto_preload = previous_state
+        end
       end
     end
 
@@ -30,10 +38,14 @@ module Goldiloader
 
   module RelationPatch
     def exec_queries
-      return super if loaded? || !auto_include_value
+      return super if loaded?
 
       models = super
-      Goldiloader::AutoIncludeContext.register_models(models, eager_load_values)
+      Goldiloader::AutoIncludeContext.register_models(
+        models,
+        included_associations: eager_load_values,
+        auto_include: auto_include_value
+      )
       models
     end
 
@@ -47,7 +59,7 @@ module Goldiloader
     end
 
     def auto_include_value
-      @values.fetch(:auto_include, Goldiloader.configuration.auto_include)
+      @values.fetch(:auto_include, nil)
     end
 
     def auto_include_value=(value)
@@ -116,6 +128,12 @@ module Goldiloader
       !loaded? && target.blank? && eager_loadable?
     end
 
+    def preload?
+      return owner.auto_include_context.auto_include unless owner.auto_include_context.auto_include.nil?
+      return Goldiloader.auto_preload unless Goldiloader.auto_preload.nil?
+      Goldiloader.configuration.auto_include
+    end
+
     def fully_load?
       !loaded? && options.fetch(:fully_load) { self.class.default_fully_load }
     end
@@ -132,7 +150,7 @@ module Goldiloader
         target
       elsif !auto_include?
         yield
-      elsif owner.auto_include_context.size == 1
+      elsif owner.auto_include_context.size == 1 || !preload?
         # Bypassing the preloader for a single model reduces object allocations by ~5% in benchmarks
         result = yield
         # As of https://github.com/rails/rails/commit/bd3b28f7f181dce53e872daa23dda101498b8fb4
