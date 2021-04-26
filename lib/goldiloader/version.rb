@@ -1,5 +1,5 @@
 # frozen_string_literal: true
 
 module Goldiloader
-  VERSION = '3.2.0-buk'
+  VERSION = '4.0.1-buk'
 end

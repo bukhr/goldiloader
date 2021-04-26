@@ -56,10 +56,6 @@ describe Goldiloader do
   end
 
   before do
-    [Address, Blog, Post, Tag, User, Group].each do |klass|
-      allow(klass).to receive(:find_by_sql).and_call_original
-    end
-
     ActiveRecord::Base.logger.info('Test setup complete')
   end
 
@@ -75,17 +71,17 @@ describe Goldiloader do
       expect(blog.association(:posts)).not_to be_loaded
     end
 
-    # Force the first blogs first post to load
-    blogs.first.posts.to_a
+    expect do
+      # Force the first blogs first post to load
+      blogs.first.posts.to_a
 
-    blogs.each do |blog|
-      expect(blog.association(:posts)).to be_loaded
-    end
+      blogs.each do |blog|
+        expect(blog.association(:posts)).to be_loaded
+      end
 
-    expect(blogs.first.posts.map(&:title)).to match_array(['blog1-post1', 'blog1-post2'])
-    expect(blogs.second.posts.map(&:title)).to match_array(['blog2-post1', 'blog2-post2'])
-
-    expect(Post).to have_received(:find_by_sql).once
+      expect(blogs.first.posts.map(&:title)).to match_array(['blog1-post1', 'blog1-post2'])
+      expect(blogs.second.posts.map(&:title)).to match_array(['blog2-post1', 'blog2-post2'])
+    end.to execute_queries(Post => 1)
   end
 
   it "auto eager loads belongs_to associations" do
@@ -96,15 +92,16 @@ describe Goldiloader do
       expect(blog.association(:blog)).not_to be_loaded
     end
 
-    # Force the first post's blog to load
-    posts.first.blog
+    expect do
+      # Force the first post's blog to load
+      posts.first.blog
 
-    posts.each do |blog|
-      expect(blog.association(:blog)).to be_loaded
-    end
+      posts.each do |blog|
+        expect(blog.association(:blog)).to be_loaded
+      end
 
-    expect(posts.map(&:blog).map(&:name)).to eq(%w[blog1 blog1 blog2 blog2])
-    expect(Blog).to have_received(:find_by_sql).once
+      expect(posts.map(&:blog).map(&:name)).to eq(['blog1', 'blog1', 'blog2', 'blog2'])
+    end.to execute_queries(Blog => 1)
   end
 
   it "auto eager loads has_one associations" do
@@ -115,56 +112,63 @@ describe Goldiloader do
       expect(user.association(:address)).not_to be_loaded
     end
 
-    # Force the first user's address to load
-    users.first.address
+    expect do
+      # Force the first user's address to load
+      users.first.address
 
-    users.each do |blog|
-      expect(blog.association(:address)).to be_loaded
-    end
+      users.each do |blog|
+        expect(blog.association(:address)).to be_loaded
+      end
 
-    expect(users.map(&:address).map(&:city)).to match_array(['author1-city', 'author2-city', 'author3-city'])
-    expect(Address).to have_received(:find_by_sql).once
+      expect(users.map(&:address).map(&:city)).to match_array(['author1-city', 'author2-city', 'author3-city'])
+    end.to execute_queries(Address => 1)
   end
 
   it "auto eager loads nested associations" do
     blogs = Blog.order(:name).to_a
-    blogs.first.posts.to_a.first.author
 
-    blogs.flat_map(&:posts).each do |blog|
-      expect(blog.association(:author)).to be_loaded
-    end
+    expect do
+      blogs.first.posts.to_a.first.author
 
-    expect(blogs.first.posts.first.author).to eq author1
-    expect(blogs.first.posts.second.author).to eq author2
-    expect(blogs.second.posts.first.author).to eq author3
-    expect(blogs.second.posts.second.author).to eq author1
-    expect(Post).to have_received(:find_by_sql).once
+      blogs.flat_map(&:posts).each do |blog|
+        expect(blog.association(:author)).to be_loaded
+      end
+
+      expect(blogs.first.posts.first.author).to eq author1
+      expect(blogs.first.posts.second.author).to eq author2
+      expect(blogs.second.posts.first.author).to eq author3
+      expect(blogs.second.posts.second.author).to eq author1
+    end.to execute_queries(Post => 1, User => 1)
   end
 
   it "auto eager loads has_many through associations" do
     blogs = Blog.order(:name).to_a
-    blogs.first.authors.to_a
 
-    blogs.each do |blog|
-      expect(blog.association(:authors)).to be_loaded
-    end
+    expect do
+      blogs.first.authors.to_a
 
-    expect(blogs.first.authors).to match_array([author1, author2])
-    expect(blogs.second.authors).to match_array([author3, author1])
-    expect(User).to have_received(:find_by_sql).once
+      blogs.each do |blog|
+        expect(blog.association(:authors)).to be_loaded
+      end
+
+      expect(blogs.first.authors).to match_array([author1, author2])
+      expect(blogs.second.authors).to match_array([author3, author1])
+    end.to execute_queries(Post => 1, User => 1)
   end
 
   it "auto eager loads nested has_many through associations" do
     blogs = Blog.order(:name).to_a
-    blogs.first.addresses.to_a
 
-    blogs.each do |blog|
-      expect(blog.association(:addresses)).to be_loaded
-    end
+    expect do
+      blogs.first.addresses.to_a
 
-    expect(blogs.first.addresses).to match_array([author1, author2].map(&:address))
-    expect(blogs.second.addresses).to match_array([author3, author1].map(&:address))
-    expect(Address).to have_received(:find_by_sql).once
+      blogs.each do |blog|
+        expect(blog.association(:addresses)).to be_loaded
+      end
+
+      expect(blogs.first.addresses).to match_array([author1, author2].map(&:address))
+      expect(blogs.second.addresses).to match_array([author3, author1].map(&:address))
+    end.to execute_queries(Post => 1, User => 1, Address => 1)
   end
 
   it "auto eager loads associations when the model is loaded via find" do
@@ -200,6 +204,21 @@ describe Goldiloader do
 
     expect(users.first.posts).to eq Post.where(author_id: author1.id)
     expect(users.second.posts).to eq Post.where(author_id: author2.id)
+  end
+
+  it "auto eager loads polymorphic associations with scopes" do
+    hidden_user = User.create!(name: 'oddball')
+    Tag.where(owner: group1).update_all(owner_type: 'User', owner_id: hidden_user.id)
+    tags = Tag.where('parent_id IS NOT NULL').order(:name).to_a
+    tags.first.scoped_owner
+
+    tags.each do |tag|
+      expect(tag.association(:scoped_owner)).to be_loaded
+    end
+
+    expect(tags.first.scoped_owner).to eq author1
+    expect(tags.second.scoped_owner).to be_nil
+    expect(tags.third.scoped_owner).to eq author2
   end
 
   it "sets inverse associations properly" do
@@ -264,23 +283,22 @@ describe Goldiloader do
   end
 
   context "with manual eager loading" do
-    let(:blogs) { Blog.order(:name).send(load_method, :posts).to_a }
-
-    before do
-      blogs.first.posts.to_a.first.author
-    end
-
     shared_examples "it auto-eager loads associations of manually eager loaded associations" do
       specify do
-        blogs.flat_map(&:posts).drop(1).each do |blog|
-          expect(blog.association(:author)).to be_loaded
-        end
+        blogs = Blog.order(:name).send(load_method, :posts).to_a
 
-        expect(blogs.first.posts.first.author).to eq author1
-        expect(blogs.first.posts.second.author).to eq author2
-        expect(blogs.second.posts.first.author).to eq author3
-        expect(blogs.second.posts.second.author).to eq author1
-        expect(Post).to have_received(:find_by_sql).at_most(:once)
+        expect do
+          blogs.first.posts.to_a.first.author
+
+          blogs.flat_map(&:posts).drop(1).each do |blog|
+            expect(blog.association(:author)).to be_loaded
+          end
+
+          expect(blogs.first.posts.first.author).to eq author1
+          expect(blogs.first.posts.second.author).to eq author2
+          expect(blogs.second.posts.first.author).to eq author3
+          expect(blogs.second.posts.second.author).to eq author1
+        end.to execute_queries(User => 1)
       end
     end
 
@@ -348,11 +366,7 @@ describe Goldiloader do
         expect(blogs.first.grouped_posts.to_a.size).to eq 1
       end
 
-      if ::Goldiloader::Compatibility::ACTIVE_RECORD_VERSION >= ::Gem::Version.new('5.0.7')
-        it_behaves_like "it auto eager loads the association", :grouped_posts
-      else
-        it_behaves_like "it doesn't auto eager load the association", :grouped_posts
-      end
+      it_behaves_like "it auto eager loads the association", :grouped_posts
     end
 
     context "associations with an offset" do
@@ -376,11 +390,7 @@ describe Goldiloader do
         expect(blogs.first.from_posts.to_a.size).to eq 1
       end
 
-      if ::Goldiloader::Compatibility::ACTIVE_RECORD_VERSION >= ::Gem::Version.new('5.0.7')
-        it_behaves_like "it auto eager loads the association", :from_posts
-      else
-        it_behaves_like "it doesn't auto eager load the association", :from_posts
-      end
+      it_behaves_like "it auto eager loads the association", :from_posts
     end
 
     context "associations with a join" do
@@ -842,18 +852,18 @@ describe Goldiloader do
         end
 
         # Force the first blogs first post to load using auto_preload
-        Blog.auto_preload do
-          blogs.first.posts.to_a
-        end
+        expect do
+          Blog.auto_preload do
+            blogs.first.posts.to_a
+          end
 
-        blogs.each do |blog|
-          expect(blog.association(:posts)).to be_loaded
-        end
+          blogs.each do |blog|
+            expect(blog.association(:posts)).to be_loaded
+          end
 
-        expect(blogs.first.posts.map(&:title)).to match_array(['blog1-post1', 'blog1-post2'])
-        expect(blogs.second.posts.map(&:title)).to match_array(['blog2-post1', 'blog2-post2'])
-
-        expect(Post).to have_received(:find_by_sql).once
+          expect(blogs.first.posts.map(&:title)).to match_array(['blog1-post1', 'blog1-post2'])
+          expect(blogs.second.posts.map(&:title)).to match_array(['blog2-post1', 'blog2-post2'])
+        end.to execute_queries(Post => 1)
       end
 
       it "auto eager loads belongs_to associations" do
@@ -864,17 +874,18 @@ describe Goldiloader do
           expect(blog.association(:blog)).not_to be_loaded
         end
 
-        # Force the first post's blog to load
-        Post.auto_preload do
-          posts.first.blog
-        end
+        expect do
+          # Force the first post's blog to load
+          Post.auto_preload do
+            posts.first.blog
+          end
 
-        posts.each do |blog|
-          expect(blog.association(:blog)).to be_loaded
-        end
+          posts.each do |blog|
+            expect(blog.association(:blog)).to be_loaded
+          end
 
-        expect(posts.map(&:blog).map(&:name)).to eq(%w[blog1 blog1 blog2 blog2])
-        expect(Blog).to have_received(:find_by_sql).once
+          expect(posts.map(&:blog).map(&:name)).to eq(%w[blog1 blog1 blog2 blog2])
+        end.to execute_queries(Blog => 1)
       end
 
       it "auto eager loads has_one associations" do
@@ -886,65 +897,69 @@ describe Goldiloader do
         end
 
         # Force the first user's address to load
-        User.auto_preload do
-          users.first.address
-        end
+        expect do
+          User.auto_preload do
+            users.first.address
+          end
 
-        users.each do |blog|
-          expect(blog.association(:address)).to be_loaded
-        end
+          users.each do |blog|
+            expect(blog.association(:address)).to be_loaded
+          end
 
-        expect(users.map(&:address).map(&:city)).to match_array(['author1-city', 'author2-city', 'author3-city'])
-        expect(Address).to have_received(:find_by_sql).once
+          expect(users.map(&:address).map(&:city)).to match_array(['author1-city', 'author2-city', 'author3-city'])
+        end.to execute_queries(Address => 1)
       end
 
       it "auto eager loads nested associations" do
         blogs = Blog.order(:name).to_a
 
-        Blog.auto_preload do
-          blogs.first.posts.to_a.first.author
-        end
+        expect do
+          Blog.auto_preload do
+            blogs.first.posts.to_a.first.author
+          end
 
-        blogs.flat_map(&:posts).each do |blog|
-          expect(blog.association(:author)).to be_loaded
-        end
+          blogs.flat_map(&:posts).each do |blog|
+            expect(blog.association(:author)).to be_loaded
+          end
 
-        expect(blogs.first.posts.first.author).to eq author1
-        expect(blogs.first.posts.second.author).to eq author2
-        expect(blogs.second.posts.first.author).to eq author3
-        expect(blogs.second.posts.second.author).to eq author1
-        expect(Post).to have_received(:find_by_sql).once
+          expect(blogs.first.posts.first.author).to eq author1
+          expect(blogs.first.posts.second.author).to eq author2
+          expect(blogs.second.posts.first.author).to eq author3
+          expect(blogs.second.posts.second.author).to eq author1
+        end.to execute_queries(Post => 1, User => 1)
       end
 
       it "auto eager loads has_many through associations" do
         blogs = Blog.order(:name).to_a
 
-        Blog.auto_preload do
-          blogs.first.authors.to_a
-        end
+        expect do 
+          Blog.auto_preload do
+            blogs.first.authors.to_a
+          end
 
-        blogs.each do |blog|
-          expect(blog.association(:authors)).to be_loaded
-        end
+          blogs.each do |blog|
+            expect(blog.association(:authors)).to be_loaded
+          end
 
-        expect(blogs.first.authors).to match_array([author1, author2])
-        expect(blogs.second.authors).to match_array([author3, author1])
-        expect(User).to have_received(:find_by_sql).once
+          expect(blogs.first.authors).to match_array([author1, author2])
+          expect(blogs.second.authors).to match_array([author3, author1])
+        end.to execute_queries(Post => 1, User => 1)
       end
 
       it "auto eager loads nested has_many through associations" do
         blogs = Blog.order(:name).to_a
-        Blog.auto_preload do
-          blogs.first.addresses.to_a
-        end
+        expect do
+          Blog.auto_preload do
+            blogs.first.addresses.to_a
+          end
 
-        blogs.each do |blog|
-          expect(blog.association(:addresses)).to be_loaded
-        end
+          blogs.each do |blog|
+            expect(blog.association(:addresses)).to be_loaded
+          end
 
-        expect(blogs.first.addresses).to match_array([author1, author2].map(&:address))
-        expect(blogs.second.addresses).to match_array([author3, author1].map(&:address))
-        expect(Address).to have_received(:find_by_sql).once
+          expect(blogs.first.addresses).to match_array([author1, author2].map(&:address))
+          expect(blogs.second.addresses).to match_array([author3, author1].map(&:address))
+        end.to execute_queries(Address => 1, Post => 1, User => 1)
       end
 
       it "auto eager loads associations when the model is loaded via find" do

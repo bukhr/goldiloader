@@ -15,17 +15,11 @@ module Goldiloader
     private
 
     def eager_load(models, association_name)
-      ::ActiveRecord::Associations::Preloader.new.preload(models, [association_name])
-    end
-
-    def first_model_with_association(models, association_name)
-      models.find { |model| has_association?(model, association_name) }
-    end
-
-    def associated_models(models, association_name)
-      # We can't just do model.send(association_name) because the association method may have been
-      # overridden
-      models.map { |model| model.association(association_name).target }.flatten.compact.uniq
+      if Goldiloader::Compatibility.pre_rails_6_2?
+        ::ActiveRecord::Associations::Preloader.new.preload(models, [association_name])
+      else
+        ::ActiveRecord::Associations::Preloader.new(records: models, associations: [association_name]).call
+      end
     end
 
     def load?(model, association_name)

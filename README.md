@@ -1,18 +1,19 @@
 # Goldiloader
 
 [![Gem Version](https://badge.fury.io/rb/goldiloader.svg)][gem]
-[![Build Status](https://secure.travis-ci.org/salsify/goldiloader.svg?branch=master)][travis]
+[![Build Status](https://circleci.com/gh/salsify/goldiloader.svg?style=svg)][circleci]
 [![Code Climate](https://codeclimate.com/github/salsify/goldiloader.svg)][codeclimate]
 [![Coverage Status](https://coveralls.io/repos/salsify/goldiloader/badge.svg)][coveralls]
 
 [gem]: https://rubygems.org/gems/goldiloader
-[travis]: http://travis-ci.org/salsify/goldiloader
+[circleci]: https://circleci.com/gh/salsify/goldiloader
 [codeclimate]: https://codeclimate.com/github/salsify/goldiloader
 [coveralls]: https://coveralls.io/r/salsify/goldiloader
 
 Wouldn't it be awesome if ActiveRecord didn't make you think about eager loading and it just did the "right" thing by default? With Goldiloader it can!
 
-**This branch only supports Rails 4.2+ with Ruby 2.3+. For older versions of Rails/Ruby use [2-x-stable](https://github.com/salsify/goldiloader/blob/2-x-stable/README.md)
+**This branch only supports Rails 5.2+ with Ruby 2.6+. For older versions of Rails/Ruby use [3-x-stable](https://github.com/salsify/goldiloader/blob/3-x-stable/README.md),
+[2-x-stable](https://github.com/salsify/goldiloader/blob/2-x-stable/README.md)
 or [1-x-stable](https://github.com/salsify/goldiloader/blob/1-x-stable/README.md).**
 
 Consider the following models:
@@ -258,7 +259,7 @@ end
 
 ## Status
 
-This gem is tested with Rails 4.2, 5.0, 5.1, 5.2 and Edge using MRI 2.3, 2.4, 2.5 and 2.6.
+This gem is tested with Rails 5.2, 6.0, 6.1 and Edge using MRI 2.6, 2.7 and 3.0. 
 
 Let us know if you find any issues or have any other feedback.
 
